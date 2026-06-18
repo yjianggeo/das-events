@@ -2,6 +2,7 @@ from datetime import datetime
 import csv
 from das_events.config import DetectConfig
 from das_events.pipeline import scan_dir, write_events_csv, EVENT_COLUMNS
+from das_events.cli import main
 from conftest import write_synth_h5
 
 
@@ -38,3 +39,24 @@ def test_write_events_csv_roundtrip(tmp_path):
     rows = list(csv.DictReader(out.open()))
     assert list(rows[0].keys()) == EVENT_COLUMNS
     assert rows[0]["event_id"] == events[0].event_id
+
+
+def test_cli_scan_then_stage(tmp_path, monkeypatch):
+    d = tmp_path / "data"; d.mkdir()
+    write_synth_h5(d / "JJK_80m_8m_4m_5000Hz_100Hz_UTC8_202501040645.h5",
+                   datetime(2025, 1, 4, 6, 45), n_time=2000, n_ch=20, fs=100.0,
+                   event_sample=1200, event_channels=range(20))
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text("sta_seconds: 0.2\nlta_seconds: 2.0\nthr_on: 3.0\n"
+                   "min_coincidence: 4\nmin_duration_seconds: 0.1\n"
+                   "merge_gap_seconds: 0.5\nchannel_decimation: 1\npad_seconds: 5.0\n")
+    events_csv = tmp_path / "events.csv"
+    rc = main(["scan", str(d), "--config", str(cfg), "--events", str(events_csv)])
+    assert rc == 0 and events_csv.exists()
+
+    staging = tmp_path / "staging"
+    rc = main(["stage", "--events", str(events_csv), "--data-dir", str(d),
+               "--out", str(staging), "--config", str(cfg)])
+    assert rc == 0
+    assert (staging / "manifest.csv").exists()
+    assert (staging / "JJK_80m_8m_4m_5000Hz_100Hz_UTC8_202501040645.h5").exists()
