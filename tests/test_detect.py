@@ -111,3 +111,16 @@ def test_config_rejects_bad_min_coincidence():
 def test_config_rejects_bad_decimation():
     with _pytest.raises(ValueError):
         DetectConfig(channel_decimation=0)
+
+
+def test_detect_skips_edge_transient(tmp_path):
+    # an event inside the edge guard (near the file end) is suppressed
+    p = tmp_path / "JJK_80m_8m_4m_5000Hz_100Hz_UTC8_202501040650.h5"
+    write_synth_h5(p, datetime(2025, 1, 4, 6, 50), n_time=2000, n_ch=20,
+                   fs=100.0, event_sample=1940, event_channels=range(20))
+    das = read_h5(p)
+    # 100 Hz, edge_skip 1.5 s -> last 150 samples (1850..2000) suppressed,
+    # covering the whole wavelet at 1880..2000
+    assert detect_file(das, _cfg(edge_skip_seconds=1.5)) == []
+    # with no edge guard the same event is found
+    assert len(detect_file(das, _cfg(edge_skip_seconds=0.0))) == 1

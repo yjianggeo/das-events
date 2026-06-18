@@ -7,6 +7,7 @@ thr_on: 4.0
 min_coincidence: 4
 min_duration_seconds: 0.2
 merge_gap_seconds: 1.0
+edge_skip_seconds: 1.0
 channel_decimation: 4
 channel_min: 0
 channel_max: null

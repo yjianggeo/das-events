@@ -66,6 +66,13 @@ def detect_file(das, cfg) -> list:
         trig[i] = cf > cfg.thr_on
         cf_max = np.maximum(cf_max, cf)
 
+    # Suppress filter/STA-LTA edge transients at both file boundaries, which
+    # otherwise fire a spurious full-borehole detection in every minute-file.
+    n_skip = int(cfg.edge_skip_seconds * fs)
+    if n_skip > 0 and 2 * n_skip < n_time:
+        trig[:, :n_skip] = False
+        trig[:, n_time - n_skip:] = False
+
     coincidence = trig.sum(axis=0)
     active = coincidence >= cfg.min_coincidence
     min_dur = max(1, int(cfg.min_duration_seconds * fs))

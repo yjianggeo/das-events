@@ -19,6 +19,8 @@ class DetectConfig:
     min_coincidence: int = 4          # channels triggered simultaneously
     min_duration_seconds: float = 0.2
     merge_gap_seconds: float = 1.0
+    edge_skip_seconds: float = 1.0    # suppress triggers within this margin of
+                                      # each file edge (bandpass/STA-LTA transient)
     # --- channel sub-sampling ---
     channel_decimation: int = 4       # use every Nth channel for detection
     channel_min: int = 0              # first channel index (inclusive)
