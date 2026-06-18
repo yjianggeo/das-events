@@ -1,6 +1,7 @@
 """Orchestration: scan a directory, build Events, read/write events.csv."""
 
 import csv
+import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -89,18 +90,61 @@ def _make_event(das, detection, cfg) -> Event:
     )
 
 
+def _dedupe_ids(events) -> None:
+    """Ensure event_id uniqueness when two peaks share a wall-clock second."""
+    seen: dict = {}
+    for ev in events:
+        n = seen.get(ev.event_id, 0)
+        seen[ev.event_id] = n + 1
+        if n:
+            ev.event_id = f"{ev.event_id}_{n + 1}"
+
+
 def scan_dir(data_dir, cfg, progress=None) -> list:
-    """Detect events in every .h5 in ``data_dir`` (sorted). Returns list[Event]."""
+    """Detect events in every .h5 in ``data_dir`` (sorted). Returns list[Event].
+
+    A file that cannot be read is skipped with a warning so one corrupt file
+    does not abort a multi-day scan.
+    """
     files = sorted(Path(data_dir).glob("*.h5"))
     events = []
     for i, fp in enumerate(files):
         if progress:
             progress(i, len(files), fp.name)
-        das = read_h5(fp)
+        try:
+            das = read_h5(fp)
+        except Exception as exc:               # corrupt / truncated / wrong format
+            warnings.warn(f"skipping unreadable file {fp.name}: {exc}")
+            continue
         for det in detect_file(das, cfg):
             events.append(_make_event(das, det, cfg))
     events.sort(key=lambda e: e.t_peak_utc)
+    _dedupe_ids(events)
     return events
+
+
+def apply_catalog(events, cfg, client_name="USGS") -> None:
+    """Backfill each event's catalog_match via an FDSN cross-match.
+
+    Network failure degrades gracefully (fetch returns [] -> all blank).
+    Mutates the events in place.
+    """
+    from .catalog import fetch_fdsn_catalog, match_catalog
+    if not events:
+        return
+    t_start = min(datetime.fromisoformat(e.t_start_utc.replace("Z", "+00:00"))
+                  for e in events)
+    t_end = max(datetime.fromisoformat(e.t_end_utc.replace("Z", "+00:00"))
+                for e in events)
+    catalog = fetch_fdsn_catalog(t_start, t_end, cfg.sta_lat, cfg.sta_lon,
+                                 cfg.catalog_radius_km, cfg.catalog_min_mag,
+                                 client_name=client_name)
+    dets = [dict(event_id=e.event_id,
+                 t_peak=datetime.fromisoformat(e.t_peak_utc.replace("Z", "+00:00")))
+            for e in events]
+    matches = match_catalog(dets, catalog, cfg.catalog_tol_seconds)
+    for e in events:
+        e.catalog_match = matches.get(e.event_id, "")
 
 
 def write_events_csv(events, path) -> None:

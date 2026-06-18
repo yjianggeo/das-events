@@ -7,8 +7,7 @@ from pathlib import Path
 
 from .config import DetectConfig, load_config
 from .io import read_h5, parse_filename
-from .detect import detect_file
-from .pipeline import scan_dir, write_events_csv, read_events_csv
+from .pipeline import scan_dir, write_events_csv, read_events_csv, apply_catalog
 from .select import select_files
 from .stage import stage_files, write_manifest
 from .waterfall import plot_waterfall
@@ -25,6 +24,8 @@ def _progress(i, n, name):
 def cmd_scan(args) -> int:
     cfg = _cfg(args)
     events = scan_dir(args.data_dir, cfg, progress=_progress)
+    if getattr(args, "catalog", False):
+        apply_catalog(events, cfg)
     write_events_csv(events, args.events)
     print(f"{len(events)} event(s) -> {args.events}")
     if args.plots:
@@ -75,6 +76,8 @@ def cmd_run(args) -> int:
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     events_csv = out / "events.csv"
     events = scan_dir(args.data_dir, cfg, progress=_progress)
+    if getattr(args, "catalog", False):
+        apply_catalog(events, cfg)
     write_events_csv(events, events_csv)
     _plot_events(events, cfg, out / "waterfall")
     dets = [dict(event_id=e.event_id,
@@ -103,6 +106,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("data_dir")
     s.add_argument("--events", default="events.csv")
     s.add_argument("--plots", help="also write per-event waterfalls to this dir")
+    s.add_argument("--catalog", action="store_true",
+                   help="annotate catalog_match via FDSN cross-match (needs network)")
     s.set_defaults(func=cmd_scan)
 
     pl = sub.add_parser("plot", parents=[common], help="waterfall of one h5 file")
@@ -122,6 +127,8 @@ def build_parser() -> argparse.ArgumentParser:
                        help="scan + plot + stage end to end")
     r.add_argument("data_dir")
     r.add_argument("--out", default="out")
+    r.add_argument("--catalog", action="store_true",
+                   help="annotate catalog_match via FDSN cross-match (needs network)")
     r.set_defaults(func=cmd_run)
     return p
 

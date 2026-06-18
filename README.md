@@ -71,10 +71,14 @@ das-events plot /path/to/one_file.h5 --out wf.png
 
 | Command | Purpose |
 |---------|---------|
-| `scan DATA_DIR [--events CSV] [--plots DIR]` | Detect events in every `*.h5`, write `events.csv` (+ optional waterfalls). |
+| `scan DATA_DIR [--events CSV] [--plots DIR] [--catalog]` | Detect events in every `*.h5`, write `events.csv` (+ optional waterfalls). |
 | `plot H5 [--out PNG]` | Waterfall of a single file. |
 | `stage --events CSV --data-dir DIR [--out DIR] [--label L1,L2]` | Select event-bearing minute-files (+pad), copy/hardlink to `staging/`, write `manifest.csv`. |
-| `run DATA_DIR [--out DIR]` | scan + plot + stage end to end. |
+| `run DATA_DIR [--out DIR] [--catalog]` | scan + plot + stage end to end. |
+
+`--catalog` annotates the `catalog_match` column by cross-matching each
+detection against the USGS FDSN catalog (needs network; degrades to blank
+offline). Without it, `catalog_match` is left blank.
 
 ## Configuration
 
@@ -125,5 +129,11 @@ typically lights up the full borehole with a visible P–S separation.
   clipped in the *plot*. The *staged data* is complete (the adjacent file is
   included), only the visual is truncated.
 - **Catalog cross-match is optional and annotation-only.** Detection is purely
-  data-driven; FDSN matching (`catalog.fetch_fdsn_catalog`) just labels which
-  detections coincide with cataloged events and degrades gracefully offline.
+  data-driven; the `--catalog` flag labels which detections coincide with
+  cataloged FDSN events and degrades gracefully offline. Without the flag,
+  `catalog_match` stays blank.
+- **Detection is currently single-threaded.** Each minute-file takes ~1 s, so a
+  multi-day session (thousands of files) can take tens of minutes. Files are
+  processed independently, so this is a natural candidate for parallelisation
+  in a future version; `scan_dir` skips unreadable files with a warning so a
+  long run survives the occasional corrupt file.
