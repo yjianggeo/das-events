@@ -2,14 +2,13 @@
 
 import argparse
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .config import DetectConfig, load_config
 from .io import read_h5, parse_filename
 from .detect import detect_file
-from .pipeline import (scan_dir, write_events_csv, read_events_csv,
-                       _make_event, EVENT_COLUMNS)
+from .pipeline import scan_dir, write_events_csv, read_events_csv
 from .select import select_files
 from .stage import stage_files, write_manifest
 from .waterfall import plot_waterfall
@@ -39,7 +38,6 @@ def _plot_events(events, cfg, out_dir):
         das = read_h5(ev.source_file)
         t0 = datetime.fromisoformat(ev.t_start_utc.replace("Z", "+00:00"))
         t1 = datetime.fromisoformat(ev.t_end_utc.replace("Z", "+00:00"))
-        from datetime import timedelta
         plot_waterfall(das, t0=t0 - timedelta(seconds=cfg.pad_seconds),
                        t1=t1 + timedelta(seconds=cfg.pad_seconds),
                        out_path=out_dir / f"{ev.event_id}.png",
@@ -47,7 +45,6 @@ def _plot_events(events, cfg, out_dir):
 
 
 def cmd_plot(args) -> int:
-    cfg = _cfg(args)
     das = read_h5(args.h5)
     plot_waterfall(das, out_path=args.out, title=Path(args.h5).name)
     print(f"waterfall -> {args.out}")
@@ -93,12 +90,12 @@ def cmd_run(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    # --config is shared via a parent parser so it is accepted both before and
-    # after the subcommand (e.g. `das-events scan DIR --config cfg.yaml`).
+    # --config lives on each subparser (single source of truth) so it is
+    # accepted after the subcommand, e.g. `das-events scan DIR --config cfg.yaml`.
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--config", help="YAML config file")
 
-    p = argparse.ArgumentParser(prog="das-events", parents=[common])
+    p = argparse.ArgumentParser(prog="das-events")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("scan", parents=[common],
