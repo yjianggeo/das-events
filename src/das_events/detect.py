@@ -30,7 +30,7 @@ class Detection:
     t_peak: datetime
     peak_ratio: float
     peak_coincidence: int
-    channel_indices: list
+    channel_indices: list[int]
     source_file: str
 
 
@@ -76,13 +76,15 @@ def detect_file(das, cfg) -> list:
         if s1 - s0 < min_dur:
             continue
         seg = coincidence[s0:s1]
+        on = active[s0:s1]                       # samples actually at/above threshold
         peak = s0 + int(np.argmax(seg))
-        live = np.flatnonzero(trig[:, s0:s1].any(axis=1))
+        # restrict to active samples so features reflect the event, not gap noise
+        live = np.flatnonzero(trig[:, s0:s1][:, on].any(axis=1))
         dets.append(Detection(
             t_start=das.time_at(s0),
             t_end=das.time_at(s1 - 1),
             t_peak=das.time_at(peak),
-            peak_ratio=float(cf_max[s0:s1].max()),
+            peak_ratio=float(cf_max[s0:s1][on].max()),
             peak_coincidence=int(seg.max()),
             channel_indices=[int(ch_idx[i]) for i in live],
             source_file=das.meta.path if das.meta else "",

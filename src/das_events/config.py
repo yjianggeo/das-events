@@ -33,6 +33,12 @@ class DetectConfig:
     catalog_min_mag: float = 1.5
     catalog_tol_seconds: float = 120.0
 
+    def __post_init__(self):
+        if self.min_coincidence < 1:
+            raise ValueError("min_coincidence must be >= 1")
+        if self.channel_decimation < 1:
+            raise ValueError("channel_decimation must be >= 1")
+
 
 def load_config(path) -> DetectConfig:
     """Load a DetectConfig from YAML, applying overrides onto the defaults."""
