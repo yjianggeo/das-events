@@ -1,6 +1,14 @@
 # das-events configuration (values shown are the built-in defaults)
+# For a real calibrated example see examples/config_jjk.yaml.
+
+# detector backend: "stalta" | "semblance" | "both"
+detector: stalta
+
+# band-pass
 freqmin: 1.0
 freqmax: 40.0
+
+# STA/LTA path
 sta_seconds: 0.5
 lta_seconds: 10.0
 thr_on: 4.0
@@ -9,8 +17,22 @@ min_duration_seconds: 0.2
 merge_gap_seconds: 1.0
 edge_skip_seconds: 1.0
 channel_decimation: 4
+
+# channel (depth) selection
 channel_min: 0
 channel_max: null
+depth_min_m: null        # ignore channels shallower than this (m); transfers across devices
+depth_max_m: null        # ignore channels deeper than this (m)
+
+# semblance path (slant-stack spatial coherence; used when detector != "stalta")
+semblance_thr: 0.04
+semblance_win_seconds: 2.0
+semblance_slowness_max: 6.0e-4
+semblance_n_slowness: 11
+semblance_channel_decimation: 3
+semblance_depth_bands: null   # e.g. [[260, 1100], [1300, 2300], [260, 2904]]
+
+# selection / staging
 pad_seconds: 60.0
 stage_mode: copy
 sta_lat: 30.28787

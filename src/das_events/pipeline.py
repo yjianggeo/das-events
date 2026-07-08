@@ -12,7 +12,8 @@ from .features import extract_features
 
 EVENT_COLUMNS = [
     "event_id", "t_peak_utc", "t_start_utc", "t_end_utc", "duration_s",
-    "peak_ratio", "peak_coincidence", "n_channels", "depth_min_m", "depth_max_m",
+    "method", "semblance", "peak_ratio", "peak_coincidence", "n_channels",
+    "depth_min_m", "depth_max_m",
     "dom_freq_hz", "bandwidth_hz", "local_time_of_day", "ps_separation_s",
     "source_file", "catalog_match", "label",
 ]
@@ -37,6 +38,8 @@ class Event:
     source_file: str
     catalog_match: str
     label: str
+    method: str = "stalta"
+    semblance: float = 0.0
 
     def as_row(self) -> dict:
         return {
@@ -45,6 +48,8 @@ class Event:
             "t_start_utc": self.t_start_utc,
             "t_end_utc": self.t_end_utc,
             "duration_s": f"{self.duration_s:.3f}",
+            "method": self.method,
+            "semblance": f"{self.semblance:.4f}",
             "peak_ratio": f"{self.peak_ratio:.3f}",
             "peak_coincidence": self.peak_coincidence,
             "n_channels": self.n_channels,
@@ -87,6 +92,8 @@ def _make_event(das, detection, cfg) -> Event:
         source_file=detection.source_file,
         catalog_match="",
         label="",
+        method=detection.method,
+        semblance=detection.semblance,
     )
 
 

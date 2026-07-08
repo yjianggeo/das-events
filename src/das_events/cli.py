@@ -42,7 +42,9 @@ def _plot_events(events, cfg, out_dir):
         plot_waterfall(das, t0=t0 - timedelta(seconds=cfg.pad_seconds),
                        t1=t1 + timedelta(seconds=cfg.pad_seconds),
                        out_path=out_dir / f"{ev.event_id}.png",
-                       title=ev.event_id)
+                       title=f"{ev.event_id}  ({ev.method}, sem={ev.semblance:.3f})",
+                       freqmin=cfg.freqmin, freqmax=cfg.freqmax, normalize=True,
+                       depth_min_m=cfg.depth_min_m, depth_max_m=cfg.depth_max_m)
 
 
 def cmd_plot(args) -> int:

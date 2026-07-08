@@ -97,6 +97,7 @@ A run is driven by one YAML file (see `examples/config.yaml`); omitted keys fall
 
 | Key | Meaning | Default |
 |-----|---------|---------|
+| `detector` | Backend: `stalta` \| `semblance` \| `both` | `stalta` |
 | `freqmin`, `freqmax` | Band-pass corners (Hz) | `1.0`, `40.0` |
 | `sta_seconds`, `lta_seconds` | STA / LTA windows (s) | `0.5`, `10.0` |
 | `thr_on` | Per-channel STA/LTA trigger threshold | `4.0` |
@@ -105,20 +106,45 @@ A run is driven by one YAML file (see `examples/config.yaml`); omitted keys fall
 | `merge_gap_seconds` | Merge triggers closer than this | `1.0` |
 | `edge_skip_seconds` | Ignore triggers within this margin of each file edge | `1.0` |
 | `channel_decimation` | Use every Nth channel for detection | `4` |
-| `channel_min`, `channel_max` | Restrict the channel (depth) range | `0`, all |
+| `channel_min`, `channel_max` | Restrict the channel (index) range | `0`, all |
+| `depth_min_m`, `depth_max_m` | Restrict the depth (metres) range — **transfers across devices** | `null`, `null` |
+| `semblance_thr` | Trigger threshold on peak semblance (0–1) | `0.04` |
+| `semblance_win_seconds` | Sliding coherence window (s) | `2.0` |
+| `semblance_slowness_max` | Apparent-slowness scan half-range (s/m) | `6e-4` |
+| `semblance_n_slowness` | Slowness grid points (odd → includes 0) | `11` |
+| `semblance_channel_decimation` | Use every Nth channel for semblance | `3` |
+| `semblance_depth_bands` | `[[lo_m, hi_m], …]` sub-bands (max over bands); `null` = whole aperture | `null` |
 | `pad_seconds` | Time pad around each event when selecting files | `60.0` |
 | `stage_mode` | `copy` \| `hardlink` | `copy` |
 | `sta_lat`, `sta_lon` | Station coordinates (catalog match) | JJK |
 | `catalog_radius_km`, `catalog_min_mag`, `catalog_tol_seconds` | FDSN cross-match params | `800`, `1.5`, `120` |
 
-These defaults are **starting points to calibrate on real data**. Raise `thr_on` / `min_coincidence` if you get too many detections; lower them if you miss known events.
+These defaults are **starting points to calibrate on real data**. Raise `thr_on` / `min_coincidence` (or `semblance_thr`) if you get too many detections; lower them if you miss known events.
+
+### Detection backends
+
+- **`stalta`** – per-channel band-pass + recursive STA/LTA with channel coincidence. Best for sharp, impulsive, high-SNR arrivals; yields a per-channel amplitude ratio. Historical default.
+- **`semblance`** – slant-stack spatial **coherence** across the borehole. It is **amplitude-agnostic and baseline-free**, so it catches *weak, emergent* coherent arrivals ("continuous first arrivals") that never push any single channel's STA/LTA over threshold, and events that fill the whole file with no quiet window to normalise against. Scans a grid of apparent slownesses (and optional depth sub-bands) and triggers when the peak semblance exceeds `semblance_thr`.
+- **`both`** – run both and merge overlapping detections (best recall). The `method` column records which backend(s) fired; strong events show `stalta+semblance`.
+
+### Calibrating on a well, then scanning another device of it
+
+`examples/config_jjk.yaml` is calibrated on the Jiakika (JJK) 2904 m borehole against three known regional-earthquake sessions (2025-01-04, 2025-02-22, 2026-05-28 — the last very weak). It uses `detector: both`, a 2–40 Hz band, a **260–2904 m** depth window (skips the 20–100× louder near-surface noise and the out-of-well tail fibre), and sub-band semblance. On that set it detects all three sessions (the weak one via semblance only) with zero false positives across a 55-minute reference session.
+
+Because `depth_min_m` / `depth_max_m`, the frequency band, and `semblance_depth_bands` are all **physical** (metres and Hz, resolved against each file's channel table), the same config transfers to another acquisition device on the same well even if its channel count or exact `dx` differ — no index editing. If the new device's noise floor is very different, re-check `semblance_thr` on a stretch of its *quiet* data (quiet minutes should peak well below it).
 
 ### `events.csv` columns
 
 `event_id`, `t_peak_utc`, `t_start_utc`, `t_end_utc`, `duration_s`,
-`peak_ratio`, `peak_coincidence`, `n_channels`, `depth_min_m`, `depth_max_m`,
-`dom_freq_hz`, `bandwidth_hz`, `local_time_of_day` (UTC+8), `ps_separation_s`,
+`method`, `semblance`, `peak_ratio`, `peak_coincidence`, `n_channels`,
+`depth_min_m`, `depth_max_m`, `dom_freq_hz`, `bandwidth_hz`,
+`local_time_of_day` (UTC+8), `ps_separation_s`,
 `source_file`, `catalog_match`, `label`.
+
+`method` is the backend(s) that fired; `semblance` (0–1) is the peak coherence
+(0 for STA/LTA-only detections); `peak_ratio` is the peak STA/LTA ratio (0 for
+semblance-only detections). A high `semblance` with `peak_ratio` 0 is the
+signature of a weak-but-coherent regional arrival.
 
 `label` is left blank — fill it during review. The features guide the call: a
 **surface blast** tends to be shallow-channel-heavy, impulsive, daytime, and
@@ -161,7 +187,7 @@ write_events_csv(events, "events.csv")
 |--------|----------------|
 | `io` | Read ZD-DAS h5 into `DasData`; parse filenames; channel depths; UTC times |
 | `config` | `DetectConfig` dataclass + YAML loader |
-| `detect` | Band-pass + recursive STA/LTA + channel-coincidence detection |
+| `detect` | STA/LTA + channel-coincidence **and** slant-stack semblance backends; depth→channel resolution |
 | `features` | Spectral, depth-range, time-of-day, P–S features per event |
 | `waterfall` | Per-event channel × time plot |
 | `select` | Map detections → minute-file upload set (+pad) |
@@ -267,6 +293,7 @@ das-events plot /path/to/one_file.h5 --out wf.png
 
 | 配置项 | 含义 | 默认值 |
 |-----|---------|---------|
+| `detector` | 检测后端：`stalta` \| `semblance` \| `both` | `stalta` |
 | `freqmin`, `freqmax` | 带通频带（Hz） | `1.0`, `40.0` |
 | `sta_seconds`, `lta_seconds` | STA / LTA 窗长（s） | `0.5`, `10.0` |
 | `thr_on` | 单道 STA/LTA 触发阈值 | `4.0` |
@@ -275,20 +302,44 @@ das-events plot /path/to/one_file.h5 --out wf.png
 | `merge_gap_seconds` | 间隔小于此值的触发合并 | `1.0` |
 | `edge_skip_seconds` | 忽略每个文件边缘此范围内的触发 | `1.0` |
 | `channel_decimation` | 检测时每 N 道取一道 | `4` |
-| `channel_min`, `channel_max` | 限定道（深度）范围 | `0`, 全部 |
+| `channel_min`, `channel_max` | 限定道（索引）范围 | `0`, 全部 |
+| `depth_min_m`, `depth_max_m` | 限定深度（米）范围——**可跨设备迁移** | `null`, `null` |
+| `semblance_thr` | 相干（semblance）峰值触发阈值（0–1） | `0.04` |
+| `semblance_win_seconds` | 滑动相干窗长（s） | `2.0` |
+| `semblance_slowness_max` | 视慢度扫描半量程（s/m） | `6e-4` |
+| `semblance_n_slowness` | 慢度网格点数（奇数含 0） | `11` |
+| `semblance_channel_decimation` | semblance 每 N 道取一道 | `3` |
+| `semblance_depth_bands` | `[[lo_m, hi_m], …]` 深度子带（取各带最大）；`null`=整段井孔 | `null` |
 | `pad_seconds` | 选文件时每个事件前后的时间余量 | `60.0` |
 | `stage_mode` | `copy`（复制）\| `hardlink`（硬链接） | `copy` |
 | `sta_lat`, `sta_lon` | 台站坐标（目录匹配用） | JJK |
 | `catalog_radius_km`, `catalog_min_mag`, `catalog_tol_seconds` | FDSN 交叉匹配参数 | `800`, `1.5`, `120` |
 
-这些默认值是**在真实数据上调参的起点**。检测过多就调高 `thr_on` / `min_coincidence`；漏掉已知事件就调低。
+这些默认值是**在真实数据上调参的起点**。检测过多就调高 `thr_on` / `min_coincidence`（或 `semblance_thr`）；漏掉已知事件就调低。
+
+### 检测后端
+
+- **`stalta`** —— 逐道带通 + 递归 STA/LTA + 多道符合。适合尖锐、冲击性、高信噪比的到时；输出逐道幅值比。历史默认。
+- **`semblance`** —— 沿井孔的**斜叠相干**（slant-stack semblance）。**与幅值无关、无需静默基线**，因此能捕获那些**微弱、缓起**的相干到时（“连续初至”）——它们不足以让任何单道 STA/LTA 越过阈值；也能捕获贯穿整段文件、没有静默窗可归一的事件。它在一组视慢度（及可选深度子带）上扫描，峰值 semblance 超过 `semblance_thr` 即触发。
+- **`both`** —— 两者都跑并合并时间重叠的检测（召回最高）。`method` 列记录是哪个后端触发；强事件会显示 `stalta+semblance`。
+
+### 先在一口井上标定，再扫描该井的另一台设备
+
+`examples/config_jjk.yaml` 已在甲基卡（JJK）2904 m 井孔上、针对三次已知区域地震时段（2025-01-04、2025-02-22、2026-05-28，最后一次极弱）完成标定。它使用 `detector: both`、2–40 Hz 频带、**260–2904 m** 深度窗（剔除比井内噪声大 20–100 倍的近地表噪声与出井尾纤），以及子带 semblance。在该数据集上三次时段全部检出（最弱的一次仅靠 semblance），并在一段 55 分钟参考时段上零误报。
+
+由于 `depth_min_m` / `depth_max_m`、频带、`semblance_depth_bands` 都是**物理量**（米与 Hz，按每个文件的道-深度表解析），即使另一台采集设备的道数或 `dx` 略有不同，同一份配置也可直接迁移，无需改索引。若新设备噪声水平差异很大，请在其一段**静默**数据上复核 `semblance_thr`（静默分钟的峰值应明显低于该阈值）。
 
 ### `events.csv` 列
 
 `event_id`、`t_peak_utc`、`t_start_utc`、`t_end_utc`、`duration_s`、
-`peak_ratio`、`peak_coincidence`、`n_channels`、`depth_min_m`、`depth_max_m`、
-`dom_freq_hz`、`bandwidth_hz`、`local_time_of_day`（UTC+8）、`ps_separation_s`、
+`method`、`semblance`、`peak_ratio`、`peak_coincidence`、`n_channels`、
+`depth_min_m`、`depth_max_m`、`dom_freq_hz`、`bandwidth_hz`、
+`local_time_of_day`（UTC+8）、`ps_separation_s`、
 `source_file`、`catalog_match`、`label`。
+
+`method` 是触发的后端；`semblance`（0–1）是峰值相干（纯 STA/LTA 检测为 0）；
+`peak_ratio` 是峰值 STA/LTA 比（纯 semblance 检测为 0）。**高 `semblance` 且
+`peak_ratio` 为 0** 正是微弱但相干的区域到时的特征。
 
 `label` 留空，复核时填写。特征有助于判别：**地表爆破**往往集中在浅道、冲击性强、
 发生在白天、且按固定时间重复；**区域地震**通常照亮整个井孔，并能看到明显的 P–S 间隔。

@@ -1,0 +1,67 @@
+# das-events — JJK (Jiakika) borehole calibration config
+# ---------------------------------------------------------------------------
+# Tuned on three known regional-earthquake sessions (2025-01-04, 2025-02-22,
+# 2026-05-28) that show continuous first arrivals under a 50 Hz low-pass.
+# Well: 2904 m borehole, dx≈4 m, GL 8 m, fs 1000 Hz, 727 in-well channels
+# (the raw files carry ~834 loci; channels beyond 2904 m are out-of-well tail
+# fibre and are excluded via depth_max_m).
+#
+# Designed to transfer to another device of the same well: depth_min_m /
+# depth_max_m and the frequency band are physical, so they carry over even if
+# the channel count or exact dx differ. Re-check semblance_thr on the new
+# device's *quiet* data if its noise floor is very different.
+
+# --- detector backend -------------------------------------------------------
+detector: both            # STA/LTA (impulsive/strong) + semblance (weak/coherent)
+
+# --- band-pass --------------------------------------------------------------
+# Event energy is 2–40 Hz (regional EQ peak 5–20 Hz). Instrument/electrical
+# lines live above 50 Hz (44, 85, 88, 113 Hz) — do not raise freqmax past ~45.
+freqmin: 2.0
+freqmax: 40.0
+
+# --- depth (channel) selection ---------------------------------------------
+# Skip the top ~260 m: surface/well-head noise there is 20–100× louder than the
+# borehole and swamps detection. Cap at the 2904 m well bottom (drop tail fibre).
+depth_min_m: 260.0
+depth_max_m: 2904.0
+
+# --- STA/LTA path -----------------------------------------------------------
+sta_seconds: 0.5
+lta_seconds: 15.0
+thr_on: 4.0
+min_coincidence: 8        # channels must co-trigger (rejects glitches/noise)
+channel_decimation: 4     # every 4th channel for the STA/LTA scan
+
+# --- semblance path (slant-stack spatial coherence) -------------------------
+# Catches weak, emergent, coherent arrivals that never push a single channel's
+# STA/LTA over threshold (e.g. the 2026-05-28 event). Amplitude-agnostic.
+semblance_thr: 0.04              # quiet minutes peak ≤0.02; events ≥0.055 here
+semblance_win_seconds: 2.0
+semblance_slowness_max: 6.0e-4   # ± apparent slowness scan (s/m)
+semblance_n_slowness: 11
+semblance_channel_decimation: 3
+# Depth sub-bands scanned for coherence (max over bands). The localized bands
+# recover depth-concentrated events and codas the full aperture dilutes.
+semblance_depth_bands:
+  - [260.0, 1100.0]
+  - [700.0, 1700.0]
+  - [1300.0, 2300.0]
+  - [1900.0, 2904.0]
+  - [260.0, 2904.0]
+
+# --- run gating -------------------------------------------------------------
+min_duration_seconds: 0.3
+merge_gap_seconds: 2.0
+edge_skip_seconds: 2.0    # kill the per-file band-pass edge transient
+
+# --- selection / staging ----------------------------------------------------
+pad_seconds: 60.0         # pull the adjacent minute-file(s) around each event
+stage_mode: copy
+
+# --- optional FDSN catalog cross-match (station = JJK) -----------------------
+sta_lat: 30.28787
+sta_lon: 101.27760
+catalog_radius_km: 800.0
+catalog_min_mag: 1.5
+catalog_tol_seconds: 120.0

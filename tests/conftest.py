@@ -7,12 +7,16 @@ from datetime import datetime, timezone
 def write_synth_h5(path, start_dt, n_time=2000, n_ch=20, fs=100.0,
                    dx=4.0, gl=8.0, event_sample=None, event_channels=None,
                    event_amp=8.0, event_freq=10.0, noise=0.02, seed=0,
-                   second_event_sample=None):
+                   second_event_sample=None, event_moveout=0.0):
     """Write a minimal ZD-DAS-style HDF5 file for tests.
 
     Injects a Gaussian-tapered sinusoid wavelet at ``event_sample`` on
     ``event_channels`` (default: all). Optionally a second wavelet at
     ``second_event_sample`` for P-S separation tests.
+
+    ``event_moveout`` (samples per channel) slants the arrival across channels
+    to emulate a moving wavefront — a coherent event with non-zero apparent
+    slowness, for exercising the semblance slowness scan.
     """
     rng = np.random.default_rng(seed)
     data = rng.normal(0.0, noise, (n_time, n_ch)).astype("float32")
@@ -23,8 +27,9 @@ def write_synth_h5(path, start_dt, n_time=2000, n_ch=20, fs=100.0,
         wav = (event_amp * np.exp(-(t / 18.0) ** 2)
                * np.sin(2 * np.pi * event_freq * t / fs)).astype("float32")
         chans = range(n_ch) if event_channels is None else event_channels
-        s0 = center - 60
         for c in chans:
+            s0 = center - 60 + int(round(event_moveout * c))
+            s0 = max(0, min(n_time - len(wav), s0))
             data[s0:s0 + len(wav), c] += wav
 
     if event_sample is not None:
