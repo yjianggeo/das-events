@@ -1,7 +1,7 @@
 # das-events configuration (values shown are the built-in defaults)
 # For a real calibrated example see examples/config_jjk.yaml.
 
-# detector backend: "stalta" | "semblance" | "both"
+# detector backend: "stalta" | "semblance" | "both" | "teleseism"
 detector: stalta
 
 # band-pass
@@ -31,6 +31,11 @@ semblance_slowness_max: 6.0e-4
 semblance_n_slowness: 11
 semblance_channel_decimation: 3
 semblance_depth_bands: null   # e.g. [[260, 1100], [1300, 2300], [260, 2904]]
+
+# teleseism (surface-wave) path — directory-level, used when detector == "teleseism"
+# (set freqmin/freqmax to the surface-wave band, e.g. 0.05-0.2; see config_teleseism.yaml)
+teleseism_min_coherence: 0.12  # per-file slowness~=0 coherence gate
+teleseism_min_run: 3           # consecutive coherent minute-files required
 
 # selection / staging
 pad_seconds: 60.0

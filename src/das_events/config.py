@@ -9,7 +9,7 @@ import yaml
 @dataclass
 class DetectConfig:
     # --- detector backend ---
-    detector: str = "stalta"          # "stalta" | "semblance" | "both"
+    detector: str = "stalta"          # "stalta" | "semblance" | "both" | "teleseism"
     # --- bandpass ---
     freqmin: float = 1.0
     freqmax: float = 40.0
@@ -41,6 +41,13 @@ class DetectConfig:
     semblance_channel_decimation: int = 3  # every Nth channel in the aperture
     semblance_depth_bands: list | None = None  # [[lo_m, hi_m], ...] sub-bands to
                                           # scan (max over bands); None = whole aperture
+    # --- teleseism (surface-wave) detector: directory-level, cross-file ---
+    # Teleseismic surface waves are very low frequency (~0.05-0.2 Hz), multi-minute
+    # dispersive trains, near-uniform across the borehole (slowness~=0). They sit in
+    # DAS common-mode noise, so the discriminant is spatial coherence sustained over
+    # several consecutive minute-files (isolated coherent bursts are noise).
+    teleseism_min_coherence: float = 0.12  # per-file slowness~=0 semblance gate
+    teleseism_min_run: int = 3             # consecutive coherent minute-files required
     # --- selection / staging ---
     pad_seconds: float = 60.0         # boundary pad pulling adjacent minute-files
     stage_mode: str = "copy"          # "copy" | "hardlink"
@@ -56,8 +63,13 @@ class DetectConfig:
             raise ValueError("min_coincidence must be >= 1")
         if self.channel_decimation < 1:
             raise ValueError("channel_decimation must be >= 1")
-        if self.detector not in ("stalta", "semblance", "both"):
-            raise ValueError("detector must be 'stalta', 'semblance', or 'both'")
+        if self.detector not in ("stalta", "semblance", "both", "teleseism"):
+            raise ValueError(
+                "detector must be 'stalta', 'semblance', 'both', or 'teleseism'")
+        if self.teleseism_min_run < 1:
+            raise ValueError("teleseism_min_run must be >= 1")
+        if not (0.0 < self.teleseism_min_coherence <= 1.0):
+            raise ValueError("teleseism_min_coherence must be in (0, 1]")
         if self.semblance_channel_decimation < 1:
             raise ValueError("semblance_channel_decimation must be >= 1")
         if self.semblance_n_slowness < 1:

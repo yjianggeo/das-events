@@ -1,0 +1,60 @@
+# das-events — teleseismic SURFACE-WAVE preset (JJK borehole)
+# ---------------------------------------------------------------------------
+# Detects the very-low-frequency, multi-minute, dispersive surface-wave train
+# of a distant (teleseismic) earthquake. This is a DIFFERENT physical class
+# from the regional body-wave "first arrivals" in config_jjk.yaml and needs a
+# different detector — do not use config_jjk.yaml for surface waves (its 2-40 Hz
+# band filters them out entirely).
+#
+# Calibrated on the 2026-06-16 ~17:12-17:16 UTC surface-wave train in the
+# JJK/data/20260616 session (files 1712-1714), verified by a coherent-beam
+# spectrogram (a sustained 0.05-0.2 Hz blob ~40x above the local baseline).
+#
+# HOW IT WORKS (directory-level, cross-file):
+#   Surface waves arrive near-uniformly across the borehole (slowness ~= 0) but
+#   sit inside strong coherent common-mode DAS noise, so a single minute's
+#   coherence/energy cannot tell them apart from a coherent-noise burst. The
+#   discriminant is TEMPORAL PERSISTENCE: the detector flags minute-files whose
+#   spatial coherence exceeds `teleseism_min_coherence`, then reports only RUNS
+#   of >= `teleseism_min_run` consecutive coherent minutes (isolated coherent
+#   bursts are rejected as noise). One Event is emitted per run, spanning it.
+#
+# USAGE:  das-events scan <session_dir> --config examples/config_teleseism.yaml
+#         das-events run  <session_dir> --config examples/config_teleseism.yaml --out out/
+#   Scan a whole session at once (the detector needs the neighbouring minutes).
+
+detector: teleseism
+
+# --- surface-wave band (Hz) -------------------------------------------------
+# Teleseismic surface waves here peak ~0.08-0.15 Hz (period ~7-20 s). Keep the
+# upper corner well under the microseism/instrument noise above ~0.25 Hz.
+freqmin: 0.05
+freqmax: 0.20
+
+# --- depth (channel) selection ---------------------------------------------
+depth_min_m: 260.0
+depth_max_m: 2904.0
+semblance_channel_decimation: 4   # every 4th borehole channel forms the beam
+
+# --- persistence detector ---------------------------------------------------
+teleseism_min_coherence: 0.12     # per-file slowness~=0 coherence gate (0-1)
+teleseism_min_run: 3              # consecutive coherent minute-files required
+# Lower the gate to ~0.10 or min_run to 2 to surface weaker candidate trains
+# (more to review); raise them to keep only the strongest.
+
+# --- per-file edge handling -------------------------------------------------
+# A 0.05 Hz band-pass rings for many seconds on a 60 s file; taper that hard.
+edge_skip_seconds: 12.0
+
+# --- selection / staging ----------------------------------------------------
+# Surface-wave trains are long; pad generously so the whole train is staged.
+pad_seconds: 120.0
+stage_mode: copy
+
+# --- optional FDSN catalog cross-match (station = JJK) -----------------------
+# For teleseisms widen the search: distant, large events.
+sta_lat: 30.28787
+sta_lon: 101.27760
+catalog_radius_km: 9000.0
+catalog_min_mag: 5.5
+catalog_tol_seconds: 900.0

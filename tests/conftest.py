@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 def write_synth_h5(path, start_dt, n_time=2000, n_ch=20, fs=100.0,
                    dx=4.0, gl=8.0, event_sample=None, event_channels=None,
                    event_amp=8.0, event_freq=10.0, noise=0.02, seed=0,
-                   second_event_sample=None, event_moveout=0.0):
+                   second_event_sample=None, event_moveout=0.0,
+                   coherent_tone_hz=None, coherent_tone_amp=1.0):
     """Write a minimal ZD-DAS-style HDF5 file for tests.
 
     Injects a Gaussian-tapered sinusoid wavelet at ``event_sample`` on
@@ -36,6 +37,14 @@ def write_synth_h5(path, start_dt, n_time=2000, n_ch=20, fs=100.0,
         _inject(event_sample)
     if second_event_sample is not None:
         _inject(second_event_sample)
+
+    # Full-duration low-frequency tone, identical phase on every channel: a
+    # spatially coherent signal for the teleseism (surface-wave) detector.
+    if coherent_tone_hz is not None:
+        tt = np.arange(n_time) / fs
+        tone = (coherent_tone_amp * np.sin(2 * np.pi * coherent_tone_hz * tt)
+                ).astype("float32")
+        data += tone[:, None]
 
     t0_us = int(start_dt.timestamp() * 1e6)
     times = (t0_us + np.arange(n_time) * (1e6 / fs)).astype("int64")

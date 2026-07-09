@@ -111,8 +111,18 @@ def scan_dir(data_dir, cfg, progress=None) -> list:
     """Detect events in every .h5 in ``data_dir`` (sorted). Returns list[Event].
 
     A file that cannot be read is skipped with a warning so one corrupt file
-    does not abort a multi-day scan.
+    does not abort a multi-day scan. ``detector="teleseism"`` dispatches to the
+    directory-level surface-wave scan (it needs neighbouring files).
     """
+    if cfg.detector == "teleseism":
+        from .teleseism import scan_teleseism_dir
+        events = []
+        for det in scan_teleseism_dir(data_dir, cfg, progress):
+            events.append(_make_event(read_h5(det.source_file), det, cfg))
+        events.sort(key=lambda e: e.t_peak_utc)
+        _dedupe_ids(events)
+        return events
+
     files = sorted(Path(data_dir).glob("*.h5"))
     events = []
     for i, fp in enumerate(files):

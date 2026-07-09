@@ -114,6 +114,8 @@ A run is driven by one YAML file (see `examples/config.yaml`); omitted keys fall
 | `semblance_n_slowness` | Slowness grid points (odd → includes 0) | `11` |
 | `semblance_channel_decimation` | Use every Nth channel for semblance | `3` |
 | `semblance_depth_bands` | `[[lo_m, hi_m], …]` sub-bands (max over bands); `null` = whole aperture | `null` |
+| `teleseism_min_coherence` | (teleseism) per-file slowness≈0 coherence gate | `0.12` |
+| `teleseism_min_run` | (teleseism) consecutive coherent minute-files required | `3` |
 | `pad_seconds` | Time pad around each event when selecting files | `60.0` |
 | `stage_mode` | `copy` \| `hardlink` | `copy` |
 | `sta_lat`, `sta_lon` | Station coordinates (catalog match) | JJK |
@@ -126,6 +128,16 @@ These defaults are **starting points to calibrate on real data**. Raise `thr_on`
 - **`stalta`** – per-channel band-pass + recursive STA/LTA with channel coincidence. Best for sharp, impulsive, high-SNR arrivals; yields a per-channel amplitude ratio. Historical default.
 - **`semblance`** – slant-stack spatial **coherence** across the borehole. It is **amplitude-agnostic and baseline-free**, so it catches *weak, emergent* coherent arrivals ("continuous first arrivals") that never push any single channel's STA/LTA over threshold, and events that fill the whole file with no quiet window to normalise against. Scans a grid of apparent slownesses (and optional depth sub-bands) and triggers when the peak semblance exceeds `semblance_thr`.
 - **`both`** – run both and merge overlapping detections (best recall). The `method` column records which backend(s) fired; strong events show `stalta+semblance`.
+- **`teleseism`** – **directory-level** detector for teleseismic **surface-wave** trains (a different physical class — see below). Unlike the other backends it looks across neighbouring minute-files, so scan a whole session at once.
+
+#### Teleseismic surface waves (`detector: teleseism`)
+
+Teleseismic surface waves are very low frequency (**~0.05–0.2 Hz**, 5–20 s period), **multi-minute dispersive** trains that arrive near-uniformly down the borehole (apparent slowness ≈ 0). Two consequences:
+
+- The regional-event config's 2–40 Hz band **filters them out entirely** — use `examples/config_teleseism.yaml`, which sets a 0.05–0.2 Hz band.
+- At those frequencies DAS is dominated by spatially-**coherent common-mode noise**, so a single minute's coherence or energy cannot separate a surface wave from a coherent-noise burst. The discriminant that works is **temporal persistence**: the detector flags minutes whose slowness-0 coherence exceeds `teleseism_min_coherence`, then reports only **runs of ≥ `teleseism_min_run` consecutive** coherent minute-files (isolated coherent bursts are rejected as noise), emitting one Event per run.
+
+Calibrated on the 2026-06-16 ~17:12–17:16 UTC surface-wave train (JJK/data/20260616), verified by a coherent-beam spectrogram; the detector returns exactly that train (`dom_freq_hz` ≈ 0.08 Hz). **Caveat:** this is inherently harder than body-wave detection — surface waves sit near the DAS common-mode-noise floor, so treat detections as review candidates and calibrate `teleseism_min_coherence` / `teleseism_min_run` on your device (lower them to surface weaker trains at the cost of more coherent-noise false positives). A co-located broadband seismometer, if available, is the surest cross-check.
 
 ### Calibrating on a well, then scanning another device of it
 
@@ -188,6 +200,7 @@ write_events_csv(events, "events.csv")
 | `io` | Read ZD-DAS h5 into `DasData`; parse filenames; channel depths; UTC times |
 | `config` | `DetectConfig` dataclass + YAML loader |
 | `detect` | STA/LTA + channel-coincidence **and** slant-stack semblance backends; depth→channel resolution |
+| `teleseism` | Directory-level teleseismic surface-wave detector (coherence + persistence) |
 | `features` | Spectral, depth-range, time-of-day, P–S features per event |
 | `waterfall` | Per-event channel × time plot |
 | `select` | Map detections → minute-file upload set (+pad) |
@@ -310,6 +323,8 @@ das-events plot /path/to/one_file.h5 --out wf.png
 | `semblance_n_slowness` | 慢度网格点数（奇数含 0） | `11` |
 | `semblance_channel_decimation` | semblance 每 N 道取一道 | `3` |
 | `semblance_depth_bands` | `[[lo_m, hi_m], …]` 深度子带（取各带最大）；`null`=整段井孔 | `null` |
+| `teleseism_min_coherence` | （远震）单文件 slowness≈0 相干门限 | `0.12` |
+| `teleseism_min_run` | （远震）需连续相干的分钟文件数 | `3` |
 | `pad_seconds` | 选文件时每个事件前后的时间余量 | `60.0` |
 | `stage_mode` | `copy`（复制）\| `hardlink`（硬链接） | `copy` |
 | `sta_lat`, `sta_lon` | 台站坐标（目录匹配用） | JJK |
@@ -322,6 +337,16 @@ das-events plot /path/to/one_file.h5 --out wf.png
 - **`stalta`** —— 逐道带通 + 递归 STA/LTA + 多道符合。适合尖锐、冲击性、高信噪比的到时；输出逐道幅值比。历史默认。
 - **`semblance`** —— 沿井孔的**斜叠相干**（slant-stack semblance）。**与幅值无关、无需静默基线**，因此能捕获那些**微弱、缓起**的相干到时（“连续初至”）——它们不足以让任何单道 STA/LTA 越过阈值；也能捕获贯穿整段文件、没有静默窗可归一的事件。它在一组视慢度（及可选深度子带）上扫描，峰值 semblance 超过 `semblance_thr` 即触发。
 - **`both`** —— 两者都跑并合并时间重叠的检测（召回最高）。`method` 列记录是哪个后端触发；强事件会显示 `stalta+semblance`。
+- **`teleseism`** —— **目录级**的远震**面波**检测（不同的物理类别，见下）。它需要跨相邻分钟文件，因此要对整个时段目录一次性扫描。
+
+#### 远震面波（`detector: teleseism`）
+
+远震面波是极低频（**~0.05–0.2 Hz**，周期 5–20 s）、持续数分钟、频散的波列，沿井孔近乎同时到达（视慢度≈0）。两个后果：
+
+- 区域事件配置的 2–40 Hz 频带会把它**完全滤掉**——请用 `examples/config_teleseism.yaml`（0.05–0.2 Hz 频带）。
+- 在这些频率上 DAS 被空间**相干的共模噪声**主导，因此**单分钟**的相干或能量无法把面波和相干噪声爆发区分开。真正有效的判据是**时间持续性**：检测器先标记 slowness≈0 相干超过 `teleseism_min_coherence` 的分钟，再仅报告**连续 ≥ `teleseism_min_run` 个**相干分钟文件构成的**波列**（孤立的相干爆发被当作噪声剔除），每个波列输出一个事件。
+
+已在 2026-06-16 约 17:12–17:16 UTC 的面波波列（JJK/data/20260616）上标定，并用相干波束谱图核实；检测器精确返回该波列（`dom_freq_hz`≈0.08 Hz）。**注意：** 面波检测本质上比体波更难——面波接近 DAS 共模噪声底，所以请把检测结果当作**复核候选**，并在你的设备上标定 `teleseism_min_coherence` / `teleseism_min_run`（调低可捞出更弱的波列，代价是更多相干噪声误报）。若有并置的宽频地震计，是最可靠的交叉验证。
 
 ### 先在一口井上标定，再扫描该井的另一台设备
 
@@ -380,7 +405,8 @@ write_events_csv(events, "events.csv")
 |--------|----------------|
 | `io` | 读取 ZD-DAS h5 为 `DasData`；解析文件名；道深；UTC 时间 |
 | `config` | `DetectConfig` 数据类 + YAML 加载 |
-| `detect` | 带通 + 递归 STA/LTA + 多道符合检测 |
+| `detect` | STA/LTA 多道符合 **与** 斜叠相干（semblance）两种后端；深度→道解析 |
+| `teleseism` | 目录级远震面波检测（相干 + 持续性） |
 | `features` | 每个事件的频谱、深度范围、当地时刻、P–S 特征 |
 | `waterfall` | 单事件的 道 × 时间 瀑布图 |
 | `select` | 把检测映射为需上传的分钟文件集合（+余量） |
